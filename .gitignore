@@ -1,0 +1,6 @@
+.env
+certs/
+*.enc
+*.aes
+data/
+__pycache__/
