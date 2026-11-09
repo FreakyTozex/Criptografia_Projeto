@@ -1,0 +1,124 @@
+﻿services:
+  pki-init:
+    image: alpine/openssl:3.3.2
+    profiles: [tools]
+    working_dir: /work
+    entrypoint: ["/bin/sh", "/work/scripts/init-pki.sh"]
+    environment:
+      COORD_IP: ${COORD_IP:-127.0.0.1}
+      BASE_IP: ${BASE_IP:-127.0.0.1}
+    volumes: [".:/work"]
+
+  pki-resume:
+    image: alpine/openssl:3.3.2
+    profiles: [tools]
+    working_dir: /work
+    entrypoint: ["/bin/sh", "/work/scripts/resume-pki.sh"]
+    environment:
+      COORD_IP: ${COORD_IP:-127.0.0.1}
+      BASE_IP: ${BASE_IP:-127.0.0.1}
+    volumes: [".:/work"]
+
+  pki-reissue-servers:
+    image: alpine/openssl:3.3.2
+    profiles: [tools]
+    working_dir: /work
+    entrypoint: ["/bin/sh", "/work/scripts/reissue-server-certs.sh"]
+    environment:
+      COORD_IP: ${COORD_IP:-127.0.0.1}
+      BASE_IP: ${BASE_IP:-127.0.0.1}
+    volumes: [".:/work"]
+
+  pki-revoke:
+    image: alpine/openssl:3.3.2
+    profiles: [tools]
+    working_dir: /work
+    entrypoint: ["/bin/sh", "/work/scripts/revoke-cert.sh"]
+    volumes: [".:/work"]
+
+  pki-issue-client:
+    image: alpine/openssl:3.3.2
+    profiles: [tools]
+    working_dir: /work
+    entrypoint: ["/bin/sh", "/work/scripts/issue-client-cert.sh"]
+    volumes: [".:/work"]
+
+  coordinator:
+    build: ./service
+    profiles: [coordinator]
+    command: ["python", "server.py"]
+    environment:
+      CERT_FILE: /run/poc-certs/server.crt
+      KEY_FILE: /run/poc-certs/server.key
+      TRUST_FILE: /run/poc-certs/trust.pem
+      PORT: "8443"
+    ports: ["8443:8443"]
+    restart: unless-stopped
+    volumes:
+      - ./certs/coord/server.crt:/run/certs/server.crt:ro
+      - ./certs/coord/server.key:/run/certs/server.key:ro
+      - ./certs/ca/trust.pem:/run/certs/trust.pem:ro
+      - message_data:/data
+
+  base:
+    build: ./service
+    profiles: [base]
+    command: ["python", "server.py"]
+    environment:
+      CERT_FILE: /run/poc-certs/server.crt
+      KEY_FILE: /run/poc-certs/server.key
+      TRUST_FILE: /run/poc-certs/trust.pem
+      PORT: "8444"
+    ports: ["8444:8444"]
+    restart: unless-stopped
+    volumes:
+      - ./certs/base/server.crt:/run/certs/server.crt:ro
+      - ./certs/base/server.key:/run/certs/server.key:ro
+      - ./certs/ca/trust.pem:/run/certs/trust.pem:ro
+      - message_data:/data
+
+  team-a:
+    build: ./service
+    profiles: [team-a]
+    command: ["tail", "-f", "/dev/null"]
+    environment:
+      CLIENT_CERT: /run/poc-certs/client.crt
+      CLIENT_KEY: /run/poc-certs/client.key
+      TRUST_FILE: /run/poc-certs/trust.pem
+      TARGET_URL: ${TARGET_URL:-https://100.125.140.45:8443}
+    volumes:
+      - ./certs/team-a/client.crt:/run/certs/client.crt:ro
+      - ./certs/team-a/client.key:/run/certs/client.key:ro
+      - ./certs/ca/trust.pem:/run/certs/trust.pem:ro
+      - ./data:/data
+      - team_a_keys:/keys
+
+  team-b:
+    build: ./service
+    profiles: [team-b]
+    command: ["tail", "-f", "/dev/null"]
+    environment:
+      CLIENT_CERT: /run/poc-certs/client.crt
+      CLIENT_KEY: /run/poc-certs/client.key
+      TRUST_FILE: /run/poc-certs/trust.pem
+      TARGET_URL: ${TARGET_URL:-https://100.125.140.45:8443}
+    volumes:
+      - ./certs/team-b/client.crt:/run/certs/client.crt:ro
+      - ./certs/team-b/client.key:/run/certs/client.key:ro
+      - ./certs/ca/trust.pem:/run/certs/trust.pem:ro
+      - ./data:/data
+      - team_b_keys:/keys
+
+  openbao:
+    image: quay.io/openbao/openbao:2.2.0
+    profiles: [coordinator]
+    command: ["server", "-dev", "-dev-root-token-id=${OPENBAO_DEV_ROOT_TOKEN:-poC-lab-only-change-me}", "-dev-listen-address=0.0.0.0:8200"]
+    environment:
+      BAO_ADDR: http://127.0.0.1:8200
+      BAO_TOKEN: ${OPENBAO_DEV_ROOT_TOKEN:-poC-lab-only-change-me}
+    ports: ["127.0.0.1:8200:8200"]
+
+volumes:
+  message_data:
+  team_a_keys:
+  team_b_keys:
